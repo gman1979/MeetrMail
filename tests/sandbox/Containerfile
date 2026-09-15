@@ -1,0 +1,40 @@
+# A Ubuntu 24.04 container that runs systemd, for testing a sandbox install of
+# MeetrMail without a VM.
+#
+# MeetrMail is a collection of systemd services, so a container that cannot
+# run systemd cannot test it -- postfix, dovecot, nsd, bind9, rspamd, nginx and
+# the management daemon are all started and checked through systemctl. The
+# stock ubuntu image has no init, so we add one.
+#
+# This is a *test* environment. It is not a supported way to run MeetrMail:
+# a real box wants its own machine, its own kernel and its own firewall.
+
+FROM docker.io/library/ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV container=podman
+
+# systemd, plus the handful of tools the installer expects to find on any
+# ordinary Ubuntu server and which the container image omits.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      systemd systemd-sysv systemd-resolved dbus dbus-user-session \
+      ca-certificates curl wget sudo locales gnupg lsb-release \
+      openssh-server rsyslog \
+      iproute2 procps less nano xz-utils \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN locale-gen en_US.UTF-8
+
+# Units that are meaningless in a container and only produce noise or failures.
+RUN systemctl mask \
+      systemd-udevd.service systemd-udevd-kernel.socket systemd-udevd-control.socket \
+      systemd-modules-load.service sys-kernel-debug.mount sys-kernel-config.mount \
+      systemd-journald-audit.socket getty.target console-getty.service
+
+# MeetrMail replaces /etc/resolv.conf with one pointing at its own bind9.
+# Podman bind-mounts that path, so setup/system.sh writes into it in place;
+# nothing is needed here beyond letting it.
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

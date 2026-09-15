@@ -1,0 +1,15 @@
+require ["regex", "fileinto", "imap4flags"];
+
+# File mail that Rspamd tagged as spam into the Spam folder.
+#
+# Rspamd's milter_headers module is configured (setup/rspamd.sh) to emit the
+# X-Spam-Status header that SpamAssassin used to add, so this rule is unchanged
+# from Mail-in-a-Box v76 and any per-user rule written against that header keeps
+# working. X-Spam is also matched because Rspamd adds that one too, and matching
+# both means a change in either header's format cannot silently stop spam being
+# filed.
+if anyof (header :regex "X-Spam-Status" "^Yes",
+          header :regex "X-Spam" "^[Yy]es") {
+  fileinto "Spam";
+  stop;
+}

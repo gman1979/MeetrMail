@@ -1,0 +1,135 @@
+#!/bin/bash
+# Switch this MeetrMail between sandbox and live mode.
+#
+#   meetrmail-mode status    show which mode the box is in and what that means
+#   meetrmail-mode sandbox   switch to sandbox mode (local testing)
+#   meetrmail-mode live      switch to live mode (public internet)
+#
+# Sandbox mode installs and configures the box exactly as live mode does -- same
+# packages, same services, same configuration files -- but skips the steps that
+# require the public internet, and points the box's own DNS at itself so that
+# everything can be tested locally:
+#
+#   * no Spamhaus DBL/ZEN lookups and no outbound port 25 probe at install time
+#   * no ufw firewall (containers frequently have no iptables)
+#   * no swapfile, no pollinate, no /dev/urandom reseed
+#   * no Let's Encrypt registration -- the self-signed certificate is used
+#   * bind9 resolves the box's own zones from the local nsd, so MX lookups,
+#     SPF/DKIM/DMARC verification and the control panel's checks all work
+#   * Rspamd's internet reputation modules are off, so mail is not delayed by
+#     DNS timeouts for every message
+#
+# Switching modes re-runs setup, which is idempotent. Mail, users, aliases,
+# DKIM keys and spam-filter training all live in STORAGE_ROOT and are not
+# touched.
+
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+	echo "This must be run as root. Try: sudo meetrmail-mode $*"
+	exit 1
+fi
+
+if [ ! -f /etc/meetrmail.conf ]; then
+	echo "This box has not been set up yet -- /etc/meetrmail.conf does not exist."
+	echo "Run setup first. To install in sandbox mode:"
+	echo
+	echo "  sudo MEETRMAIL_SANDBOX=1 setup/start.sh"
+	echo
+	exit 1
+fi
+
+source /etc/meetrmail.conf
+
+CURRENT="${SANDBOX_MODE:-0}"
+
+show_status() {
+	echo
+	if [ "$CURRENT" = "1" ]; then
+		echo "Mode:     SANDBOX (local testing)"
+		echo
+		echo "This box will not send or receive mail from the public internet, and its"
+		echo "TLS certificate is self-signed. Its own domains resolve from the local"
+		echo "nsd rather than through the internet."
+		echo
+		echo "Switch with:  sudo meetrmail-mode live"
+	else
+		echo "Mode:     LIVE"
+		echo
+		echo "This box expects to be reachable from the public internet."
+		echo
+		echo "Switch with:  sudo meetrmail-mode sandbox"
+	fi
+	echo
+	echo "Hostname: ${PRIMARY_HOSTNAME:-unknown}"
+	echo "Public IP: ${PUBLIC_IP:-unknown}"
+	echo
+	if [ -x /usr/bin/systemctl ]; then
+		echo "Services:"
+		for svc in postfix dovecot rspamd redis-server nsd bind9 nginx meetrmail opendkim opendmarc; do
+			state=$(systemctl is-active "$svc" 2>/dev/null || echo "not-installed")
+			printf "  %-16s %s\n" "$svc" "$state"
+		done
+		echo
+	fi
+}
+
+set_mode() {
+	local want=$1
+	if [ "$CURRENT" = "$want" ]; then
+		echo "This box is already in $([ "$want" = 1 ] && echo sandbox || echo live) mode."
+		echo "Re-running setup anyway to make sure the configuration matches."
+	fi
+
+	# Find the source tree. /usr/local/bin/meetrmail-setup records it.
+	local srcdir=""
+	if [ -f /usr/local/bin/meetrmail-setup ]; then
+		# awk rather than `sed | head`: this script runs under `set -o pipefail`,
+		# where head closing the pipe early would make the whole pipeline fail.
+		srcdir=$(awk '/^cd /{ print substr($0, 4); exit }' /usr/local/bin/meetrmail-setup)
+	fi
+	if [ -z "$srcdir" ] || [ ! -f "$srcdir/setup/start.sh" ]; then
+		echo "Could not find the MeetrMail source directory."
+		echo "Run setup by hand from the source tree instead:"
+		echo
+		if [ "$want" = "1" ]; then
+			echo "  sudo MEETRMAIL_SANDBOX=1 setup/start.sh"
+		else
+			echo "  sudo MEETRMAIL_SANDBOX=0 setup/start.sh"
+		fi
+		echo
+		exit 1
+	fi
+
+	if [ "$want" = "0" ]; then
+		echo
+		echo "Switching to LIVE mode."
+		echo
+		echo "Before mail will actually work, these have to be true -- setup will"
+		echo "check some of them and the control panel checks the rest:"
+		echo
+		echo "  * outbound port 25 is open from this machine"
+		echo "  * this IP's reverse DNS (PTR) resolves to $PRIMARY_HOSTNAME"
+		echo "  * your registrar's nameservers/glue point at this box"
+		echo "  * this IP is not on a major blocklist"
+		echo
+	else
+		echo
+		echo "Switching to SANDBOX mode. This box will stop being reachable as a"
+		echo "public mail server."
+		echo
+	fi
+
+	cd "$srcdir"
+	MEETRMAIL_SANDBOX="$want" setup/start.sh
+}
+
+case "${1:-status}" in
+	status)  show_status ;;
+	sandbox) set_mode 1 ;;
+	live)    set_mode 0 ;;
+	*)
+		echo "Usage: meetrmail-mode [status|sandbox|live]"
+		exit 1
+		;;
+esac

@@ -1,0 +1,11 @@
+[Unit]
+Description=MeetrMail System Management Service
+After=multi-user.target
+
+[Service]
+Type=idle
+IgnoreSIGPIPE=False
+ExecStart=/usr/local/lib/meetrmail/start
+
+[Install]
+WantedBy=multi-user.target

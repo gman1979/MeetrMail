@@ -1,0 +1,62 @@
+# Dependencies for the MeetrMail management daemon.
+#
+# This is installed by setup/management.sh with `uv sync --frozen`, into a
+# virtualenv at /usr/local/lib/meetrmail/env, using a CPython that uv
+# downloads itself. The system Python is never touched, which is what keeps
+# PEP 668 (noble's EXTERNALLY-MANAGED marker) out of the picture entirely.
+#
+# uv.lock in this directory pins the exact resolved versions and hashes. To
+# change a dependency: edit this file, run `uv lock`, and commit both files.
+
+[project]
+name = "meetrmail-management"
+version = "76.1.0"
+description = "MeetrMail management daemon"
+requires-python = "==3.12.*"
+
+dependencies = [
+    # Packages maintained by the MeetrMail author.
+    "rtyaml",
+    "exclusiveprocess",
+
+    # Web application.
+    "flask",
+    "gunicorn",
+
+    # Mail and DNS.
+    # NOTE: email_validator is also used by setup/questions.sh, which runs
+    # before this environment exists and therefore installs it into a
+    # throwaway uv environment of its own. Keep the constraints in sync.
+    "email_validator>=1.0.0",
+    "dnspython",
+    "idna>=2.0.0",
+    "postfix-mta-sts-resolver",
+
+    # TLS certificates (ssl_certificates.py) and TOTP (mfa.py).
+    #
+    # v76 pinned cryptography==37.0.2, from May 2022. No cp312 wheel exists for
+    # it, so pip falls back to a source build that needs an old Rust toolchain
+    # and setuptools-rust, and never completes. Unpinned here and pinned for
+    # real by uv.lock instead.
+    "cryptography",
+    "pyotp",
+    "qrcode[pil]",
+
+    # Backup targets. These are needed in *two* places: the management daemon
+    # imports them directly (daemon.py lists S3 regions, backup.py validates a
+    # target before saving it), and duplicity needs them on its own
+    # interpreter, which is the system python3. setup/management.sh installs
+    # them a second time into an environment for duplicity.
+    "b2sdk",
+    "boto3",
+
+    # Miscellaneous.
+    "python-dateutil",
+    "expiringdict",
+    "psutil",
+]
+
+[tool.uv]
+# Never reach out to a Python that happens to be on the system; always use the
+# managed CPython that uv downloads. This is the whole point of using uv here.
+python-preference = "only-managed"

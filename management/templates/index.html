@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <title>{{hostname}} - MeetrMail Control Panel</title>
+
+        <meta name="robots" content="noindex, nofollow">
+
+        <link rel="stylesheet" href="/admin/assets/bootstrap/css/bootstrap.min.css">
+        <style>
+            body {
+              overflow-y: scroll;
+              padding-bottom: 20px;
+            }
+
+            p {
+              margin-bottom: 1.25em;
+            }
+
+            h1, h2, h3, h4 {
+              font-family: sans-serif;
+              font-weight: bold;
+            }
+
+            h2 {
+              margin: 1em 0;
+            }
+
+            h3 {
+              font-size: 130%;
+              border-bottom: 1px solid black;
+              padding-bottom: 3px;
+              margin-bottom: 13px;
+              margin-top: 30px;
+            }
+            .panel-heading h3 {
+              border: none;
+              padding: 0;
+              margin: 0;
+            }
+
+            h4 {
+              font-size: 110%;
+              margin-bottom: 13px;
+              margin-top: 18px;
+            }
+            h4:first-child {
+              margin-top: 6px;
+            }
+
+            .admin_panel {
+              display: none;
+            }
+
+            table.table {
+              margin: 1.5em 0;
+            }
+
+            ol li {
+              margin-bottom: 1em;
+            }
+
+            .if-logged-in { display: none; }
+            .if-logged-in-admin { display: none; }
+
+      /* The below only gets used if it is supported */
+      @media (prefers-color-scheme: dark) {
+        /* Invert invert lightness but not hue */
+        html {
+          filter: invert(100%) hue-rotate(180deg);
+        }
+
+        /* Override Bootstrap theme here to give more contrast. The black turns to white by the filter. */
+        .form-control {
+          color: black !important;
+        }
+
+        /* Revert the invert for the navbar */
+        button, div.navbar {
+          filter: invert(100%) hue-rotate(180deg);
+        }
+
+        /* Revert the revert for the dropdowns */
+        ul.dropdown-menu {
+          filter: invert(100%) hue-rotate(180deg);
+        }
+      }
+        </style>
+        <link rel="stylesheet" href="/admin/assets/bootstrap/css/bootstrap-theme.min.css">
+    </head>
+    <body>
+
+    <!--[if lt IE 8]><p>Internet Explorer version 8 or any modern web browser is required to use this website, sorry.<![endif]-->
+    <!--[if gt IE 7]><!-->
+
+    <div class="navbar navbar-inverse navbar-static-top" role="navigation">
+      <div class="container">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target=".navbar-collapse">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">{{hostname}}</a>
+        </div>
+        <div class="navbar-collapse collapse">
+          <ul class="nav navbar-nav">
+            <li class="dropdown if-logged-in-admin">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown">System <b class="caret"></b></a>
+              <ul class="dropdown-menu">
+                <li><a href="#system_status">Status Checks</a></li>
+                <li><a href="#tls">TLS (SSL) Certificates</a></li>
+                <li><a href="#system_backup">Backup Status</a></li>
+                <li class="divider"></li>
+                <li class="dropdown-header">Advanced Pages</li>
+                <li><a href="#custom_dns">Custom DNS</a></li>
+                <li><a href="#external_dns">External DNS</a></li>
+                <li><a href="#munin">Munin Monitoring</a></li>
+              </ul>
+            </li>
+            <li><a href="#mail-guide" class="if-logged-in-not-admin">Mail</a></li>
+            <li class="dropdown if-logged-in-admin">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown">Mail &amp; Users <b class="caret"></b></a>
+              <ul class="dropdown-menu">
+                <li><a href="#mail-guide">Instructions</a></li>
+                <li><a href="#users">Users</a></li>
+                <li><a href="#aliases">Aliases</a></li>
+                <li class="divider"></li>
+                <li class="dropdown-header">Your Account</li>
+                <li><a href="#mfa">Two-Factor Authentication</a></li>
+              </ul>
+            </li>
+            <li><a href="#sync_guide" class="if-logged-in">Contacts/Calendar</a></li>
+            <li><a href="#web" class="if-logged-in-admin">Web</a></li>
+          </ul>
+          <ul class="nav navbar-nav navbar-right">
+            <li class="if-logged-in"><a href="#" onclick="do_logout(); return false;" style="color: white">Log out</a></li>
+          </ul>
+        </div><!--/.navbar-collapse -->
+      </div>
+    </div>
+
+    <div class="container">
+      <div id="panel_welcome" class="admin_panel">
+      {% include "welcome.html" %}
+      </div>
+
+      <div id="panel_system_status" class="admin_panel">
+      {% include "system-status.html" %}
+      </div>
+
+      <div id="panel_system_backup" class="admin_panel">
+      {% include "system-backup.html" %}
+      </div>
+
+      <div id="panel_external_dns" class="admin_panel">
+      {% include "external-dns.html" %}
+      </div>
+
+      <div id="panel_custom_dns" class="admin_panel">
+      {% include "custom-dns.html" %}
+      </div>
+
+      <div id="panel_mfa" class="admin_panel">
+      {% include "mfa.html" %}
+      </div>
+
+      <div id="panel_login" class="admin_panel">
+      {% include "login.html" %}
+      </div>
+
+      <div id="panel_mail-guide" class="admin_panel">
+      {% include "mail-guide.html" %}
+      </div>
+
+      <div id="panel_users" class="admin_panel">
+      {% include "users.html" %}
+      </div>
+
+      <div id="panel_aliases" class="admin_panel">
+      {% include "aliases.html" %}
+      </div>
+
+      <div id="panel_sync_guide" class="admin_panel">
+      {% include "sync-guide.html" %}
+      </div>
+
+      <div id="panel_web" class="admin_panel">
+      {% include "web.html" %}
+      </div>
+
+      <div id="panel_tls" class="admin_panel">
+      {% include "ssl.html" %}
+      </div>
+
+      <div id="panel_munin" class="admin_panel">
+      {% include "munin.html" %}
+      </div>
+
+      <hr>
+
+      <footer>
+        <p>This is a <a href="https://meetrmail.net">MeetrMail</a>.</p>
+      </footer>
+    </div> <!-- /container -->
+
+        <div id="ajax_loading_indicator" style="display: none; position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 100000; text-align: center; background-color: rgba(255,255,255,.75)">
+          <div style="margin: 20% auto">
+            <div><span class="fa fa-spinner fa-pulse"></span></div>
+            <div>Loading...</div>
+          </div>
+        </div>
+
+        <div id="global_modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="errorModalTitle">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close Dialog">&times;</button>
+                <h4 class="modal-title" id="errorModalTitle"> </h4>
+              </div>
+              <div class="modal-body">
+                <p> </p>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">OK</button>
+                <button type="button" class="btn btn-danger" data-dismiss="modal">Yes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <script src="/admin/assets/jquery.min.js"></script>
+        <script src="/admin/assets/bootstrap/js/bootstrap.min.js"></script>
+
+        <script>
+var global_modal_state = null;
+var global_modal_funcs = null;
+
+$(function() {
+  $('#global_modal').on('shown.bs.modal', function (e) {
+    // set focus to first input in the global modal's body
+    var input = $('#global_modal .modal-body input');
+    if (input.length > 0) $(input[0]).focus();
+  })
+  $('#global_modal .btn-danger').click(function() {
+    // Don't take action now. Wait for the modal to be totally hidden
+    // so that we don't attempt to show another modal while this one
+    // is closing.
+    global_modal_state = 0; // OK
+  })
+  $('#global_modal .btn-default').click(function() {
+    global_modal_state = 1; // Cancel
+  })
+  $('#global_modal').on('hidden.bs.modal', function (e) {
+    // do the cancel function
+    if (global_modal_state == null) global_modal_state = 1; // cancel if the user hit ESC or clicked outside of the modal
+    if (global_modal_funcs && global_modal_funcs[global_modal_state])
+      global_modal_funcs[global_modal_state]();
+  })
+})
+
+function show_modal_error(title, message, callback) {
+  $('#global_modal h4').text(title);
+  $('#global_modal .modal-body').html("<p/>");
+  if (typeof question == 'string') {
+    $('#global_modal p').text(message);
+    $('#global_modal .modal-dialog').addClass("modal-sm");
+  } else {
+    $('#global_modal p').html("").append(message);
+    $('#global_modal .modal-dialog').removeClass("modal-sm");
+  }
+  $('#global_modal .btn-default').show().text("OK");
+  $('#global_modal .btn-danger').hide();
+  global_modal_funcs = [callback, callback];
+  global_modal_state = null;
+  $('#global_modal').modal({});
+  return false; // handy when called from onclick
+}
+
+function show_modal_confirm(title, question, verb, yes_callback, cancel_callback) {
+  $('#global_modal h4').text(title);
+  if (typeof question == 'string') {
+    $('#global_modal .modal-dialog').addClass("modal-sm");
+    $('#global_modal .modal-body').html("<p/>");
+    $('#global_modal p').text(question);
+  } else {
+    $('#global_modal .modal-dialog').removeClass("modal-sm");
+    $('#global_modal .modal-body').html("").append(question);
+  }
+  if (typeof verb == 'string') {
+    $('#global_modal .btn-default').show().text("Cancel");
+    $('#global_modal .btn-danger').show().text(verb);
+  } else {
+    $('#global_modal .btn-default').show().text(verb[1]);
+    $('#global_modal .btn-danger').show().text(verb[0]);
+  }
+  global_modal_funcs = [yes_callback, cancel_callback];
+  global_modal_state = null;
+  $('#global_modal').modal({});
+  return false; // handy when called from onclick
+}
+
+var ajax_num_executing_requests = 0;
+function ajax_with_indicator(options) {
+  setTimeout("if (ajax_num_executing_requests > 0) $('#ajax_loading_indicator').fadeIn()", 100);
+  function hide_loading_indicator() {
+    ajax_num_executing_requests--;
+    if (ajax_num_executing_requests == 0)
+      $('#ajax_loading_indicator').stop(true).hide(); // stop() prevents an ongoing fade from causing the thing to be shown again after this call
+  }
+  var old_success = options.success;
+  var old_error = options.error;
+  options.success = function(data) {
+    hide_loading_indicator();
+    if (data.status == "error")
+      show_modal_error("Error", data.message);
+    else if (old_success)
+      old_success(data);
+  };
+  options.error = function(jqxhr) {
+    hide_loading_indicator();
+    if (!old_error)
+      show_modal_error("Error", "Something went wrong, sorry.")
+    else
+      old_error(jqxhr.responseText, jqxhr);
+  };
+  ajax_num_executing_requests++;
+  $.ajax(options);
+  return false; // handy when called from onclick
+}
+
+var api_credentials = null;
+function api(url, method, data, callback, callback_error, headers) {
+  // from http://www.webtoolkit.info/javascript-base64.html
+  function base64encode(input) {
+    _keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    var output = "";
+    var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+    var i = 0;
+    while (i < input.length) {
+        chr1 = input.charCodeAt(i++);
+        chr2 = input.charCodeAt(i++);
+        chr3 = input.charCodeAt(i++);
+        enc1 = chr1 >> 2;
+        enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        enc4 = chr3 & 63;
+        if (isNaN(chr2)) {
+            enc3 = enc4 = 64;
+        } else if (isNaN(chr3)) {
+            enc4 = 64;
+        }
+        output = output +
+        _keyStr.charAt(enc1) + _keyStr.charAt(enc2) +
+        _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
+    }
+
+    return output;
+  }
+
+  function default_error(text, xhr) {
+    if (xhr.status != 403) // else handled below
+      show_modal_error("Error", "Something went wrong, sorry.")
+  }
+
+  ajax_with_indicator({
+    url: "/admin" + url,
+    method: method,
+    cache: false,
+    data: data,
+    headers: headers,
+    // the custom DNS api sends raw POST/PUT bodies --- prevent URL-encoding
+    processData: typeof data != "string",
+    mimeType: typeof data == "string" ? "text/plain; charset=ascii" : null,
+
+    beforeSend: function(xhr) {
+      // We don't store user credentials in a cookie to avoid the hassle of CSRF
+      // attacks. The Authorization header only gets set in our AJAX calls triggered
+      // by user actions.
+      if (api_credentials)
+        xhr.setRequestHeader(
+          'Authorization',
+          'Basic ' + base64encode(api_credentials.username + ':' + api_credentials.session_key));
+    },
+    success: callback,
+    error: callback_error || default_error,
+    statusCode: {
+      403: function(xhr) {
+        // Credentials are no longer valid. Try to login again.
+        var p = current_panel;
+        clear_credentials();
+        show_panel('login');
+        show_hide_menus();
+        switch_back_to_panel = p;
+      }
+    }
+  })
+}
+
+var current_panel = null;
+var switch_back_to_panel = null;
+
+function clear_credentials() {
+  // Forget the token.
+  api_credentials = null;
+  if (typeof localStorage != 'undefined')
+    localStorage.removeItem("meetrmail-cp-credentials");
+  if (typeof sessionStorage != 'undefined')
+    sessionStorage.removeItem("meetrmail-cp-credentials");
+}
+
+function do_logout() {
+  // Clear the session from the backend.
+  api("/logout", "POST");
+
+  // Remove locally stored credentials
+  clear_credentials();
+
+  // Return to the start.
+  show_panel('login');
+
+  // Reset menus.
+  show_hide_menus();
+}
+
+function show_panel(panelid) {
+  if (panelid.getAttribute) {
+    // we might be passed an HTMLElement <a>.
+    panelid = panelid.getAttribute('href').substring(1);
+  }
+
+  $('.admin_panel').hide();
+  $('#panel_' + panelid).show();
+  if (window["show_" + panelid])
+    window["show_" + panelid]();
+
+  current_panel = panelid;
+  switch_back_to_panel = null;
+}
+
+window.onhashchange = function() {
+  var panelid = window.location.hash.substring(1);
+  show_panel(panelid);
+};
+
+$(function() {
+  // Recall saved user credentials.
+  try {
+    if (typeof sessionStorage != 'undefined' && sessionStorage.getItem("meetrmail-cp-credentials"))
+      api_credentials = JSON.parse(sessionStorage.getItem("meetrmail-cp-credentials"));
+    else if (typeof localStorage != 'undefined' && localStorage.getItem("meetrmail-cp-credentials"))
+      api_credentials = JSON.parse(localStorage.getItem("meetrmail-cp-credentials"));
+  } catch (_) {
+  }
+
+  // Toggle menu state.
+  show_hide_menus();
+
+  // Recall what the user was last looking at.
+  if (api_credentials != null && window.location.hash) {
+    var panelid = window.location.hash.substring(1);
+    show_panel(panelid);
+  } else if (api_credentials != null) {
+    show_panel('welcome');
+  } else {
+    show_panel('login');
+  }
+})
+
+        </script>
+    </body>
+</html>
