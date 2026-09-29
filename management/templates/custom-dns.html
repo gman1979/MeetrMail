@@ -51,6 +51,13 @@
     </div>
   </div>
   <div class="form-group">
+    <label for="customdnsTTL" class="col-sm-1 control-label">TTL</label>
+    <div class="col-sm-10">
+      <input type="number" class="form-control" id="customdnsTTL" style="max-width: 400px" min="30" max="2592000" placeholder="default (86400)">
+      <div class="text-info" style="margin-top: .5em">Optional. How long, in seconds, resolvers may cache this record (30 to 2592000). Leave blank for the default of one day. Use a short TTL such as 300 for records you change often. All values of the same name and type share one TTL.</div>
+    </div>
+  </div>
+  <div class="form-group">
     <div class="col-sm-offset-1 col-sm-11">
       <button type="submit" class="btn btn-primary">Set Record</button>
     </div>
@@ -68,10 +75,11 @@
     <th scope="col"> Domain Name</th>
     <th scope="col"> Record Type</th>
     <th scope="col"> Value</th>
+    <th scope="col"> TTL</th>
     <th scope="col" aria-label="Actions"></th>
   </tr></thead>
   <tbody>
-    <tr><td colspan="4">Loading...</td></tr>
+    <tr><td colspan="5">Loading...</td></tr>
   </tbody>
 </table>
 
@@ -122,7 +130,7 @@
 <thead><tr
 <th scope="col"> Verb</th> <th scope="col"> Usage</th>
 </tr></thead>
-<tr><td>GET</td> <td>Returns matching custom DNS records as a JSON array of objects. Each object has the keys <code>qname</code>, <code>rtype</code>, and <code>value</code>. The optional <code>qname</code> and <code>rtype</code> parameters in the request URL filter the records returned in the response. The request body (<code>-d "..."</code>) must be omitted.</td></tr>
+<tr><td>GET</td> <td>Returns matching custom DNS records as a JSON array of objects. Each object has the keys <code>qname</code>, <code>rtype</code>, <code>value</code>, and <code>ttl</code> (<code>null</code> when the default TTL is used). The optional <code>qname</code> and <code>rtype</code> parameters in the request URL filter the records returned in the response. The request body (<code>-d "..."</code>) must be omitted.</td></tr>
 <tr><td>PUT</td> <td>Sets a custom DNS record replacing any existing records with the same <code>qname</code> and <code>rtype</code>. Use PUT (instead of POST) when you only have one value for a <code>qname</code> and <code>rtype</code>, such as typical <code>A</code> records (without round-robin).</td></tr>
 <tr><td>POST</td> <td>Adds a new custom DNS record. Use POST when you have multiple <code>TXT</code> records or round-robin <code>A</code> records. (PUT would delete previously added records.)</td></tr>
 <tr><td>DELETE</td> <td>Deletes custom DNS records. If the request body (<code>-d "..."</code>) is empty or omitted, deletes all records matching the <code>qname</code> and <code>rtype</code>. If the request body is present, deletes only the record matching the <code>qname</code>, <code>rtype</code> and value.</td></tr>
@@ -138,6 +146,7 @@
 <tr><td>password</td> <td>That user&rsquo;s password.</td></tr>
 <tr><td>qname</td> <td>The fully qualified domain name for the record you are trying to set. It must be one of the domain names or a subdomain of one of the domain names hosted on this box. (Add mail users or aliases to add new domains.)</td></tr>
 <tr><td>rtype</td> <td>The resource type. Defaults to <code>A</code> if omitted. Possible values: <code>A</code> (an IPv4 address), <code>AAAA</code> (an IPv6 address), <code>TXT</code> (a text string), <code>CNAME</code> (an alias, which is a fully qualified domain name &mdash; don&rsquo;t forget the final period), <code>MX</code>, <code>SRV</code>, <code>SSHFP</code>, <code>CAA</code> or <code>NS</code>.</td></tr>
+<tr><td>ttl</td> <td>Optional, for PUT and POST only. Passed as a query string parameter (<code>?ttl=300</code>) because the request body holds the value. The record&rsquo;s TTL in seconds, from 30 to 2592000. It applies to every record with the same <code>qname</code> and <code>rtype</code>. Omit it to use (or keep) the default.</td></tr>
 <tr><td>value</td> <td>For PUT, POST, and DELETE, the record&rsquo;s value. If the <code>rtype</code> is <code>A</code> or <code>AAAA</code> and <code>value</code> is empty or omitted, the IPv4 or IPv6 address of the remote host is used (be sure to use the <code>-4</code> or <code>-6</code> options to curl). This is handy for dynamic DNS!</td></tr>
 </table>
 
@@ -149,6 +158,9 @@
 
 <pre># sets laptop.mydomain.com to point to the IP address of the machine you are executing curl on
 curl -X PUT https://{{hostname}}/admin/dns/custom/laptop.mydomain.com
+
+# sets a record with a 5 minute TTL
+curl -X PUT "https://{{hostname}}/admin/dns/custom/laptop.mydomain.com?ttl=300"
 
 # deletes that record and all A records for that domain name
 curl -X DELETE https://{{hostname}}/admin/dns/custom/laptop.mydomain.com
@@ -218,7 +230,7 @@ function show_current_custom_dns_update_after_sort() {
       var last_zone = null;
       for (var i = 0; i < data.length; i++) {
         if (sort_key == "qname" && data[i].zone != last_zone) {
-          var r = $("<tr><th role='heading' aria-level='4' colspan=4 style='background-color: #EEE'></th></tr>");
+          var r = $("<tr><th role='heading' aria-level='4' colspan=5 style='background-color: #EEE'></th></tr>");
           r.find("th").text(data[i].zone);
           tbody.append(r);
           last_zone = data[i].zone;
@@ -232,6 +244,7 @@ function show_current_custom_dns_update_after_sort() {
         tr.append($('<td class="long"/>').text(data[i].qname));
         tr.append($('<td/>').text(data[i].rtype));
         tr.append($('<td class="long" style="max-width: 40em"/>').text(data[i].value));
+        tr.append($('<td/>').text(data[i].ttl ? data[i].ttl : 'default'));
         tr.append($('<td>[<a href="#" onclick="return delete_custom_dns_record(this)">delete</a>]</td>'));
       }
 }
@@ -262,6 +275,7 @@ function do_set_secondary_dns() {
 }
 
 function do_set_custom_dns(qname, rtype, value, method) {
+  var ttl = null;
   if (!qname) {
     if ($('#customdnsQname').val() != '')
       qname = $('#customdnsQname').val() + '.' + $('#customdnsZone').val();
@@ -270,10 +284,11 @@ function do_set_custom_dns(qname, rtype, value, method) {
     rtype = $('#customdnsType').val();
     value = $('#customdnsValue').val();
     method = 'POST';
+    ttl = $('#customdnsTTL').val();
   }
 
   api(
-    "/dns/custom/" + qname + "/" + rtype,
+    "/dns/custom/" + qname + "/" + rtype + (ttl ? "?ttl=" + encodeURIComponent(ttl) : ""),
     method,
     value,
     function(data) {

@@ -1,0 +1,151 @@
+<h2>Import Mail</h2>
+
+<p>Copy the mail from an account on another IMAP server into one of this box&rsquo;s mailboxes. Folders, flags and message dates are kept. The copy is one-way: nothing changes on the old server and nothing already in the mailbox here is removed, so it is safe to run again to pick up mail that arrived in the meantime.</p>
+
+<form class="form-horizontal" role="form" onsubmit="return import_start();">
+  <div class="form-group">
+    <label for="importDest" class="col-sm-2 control-label">Copy into</label>
+    <div class="col-sm-8">
+      <select class="form-control" id="importDest" style="max-width: 400px"></select>
+      <div class="text-info" style="margin-top: .5em">The mailbox on this box. <a href="#users">Add the user</a> first if it doesn&rsquo;t exist yet.</div>
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="importHost" class="col-sm-2 control-label">Source server</label>
+    <div class="col-sm-8">
+      <input type="text" class="form-control" id="importHost" placeholder="imap.example.com" style="max-width: 400px">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="importSecurity" class="col-sm-2 control-label">Connection</label>
+    <div class="col-sm-8 form-inline">
+      <select class="form-control" id="importSecurity" onchange="import_security_changed()">
+        <option value="imaps">SSL/TLS (port 993)</option>
+        <option value="starttls">STARTTLS (port 143)</option>
+        <option value="none">None, unencrypted (port 143)</option>
+      </select>
+      <input type="number" class="form-control" id="importPort" value="993" min="1" max="65535" style="width: 7em" aria-label="Port">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="importUser" class="col-sm-2 control-label">Username</label>
+    <div class="col-sm-8">
+      <input type="text" class="form-control" id="importUser" autocomplete="off" style="max-width: 400px">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="importPassword" class="col-sm-2 control-label">Password</label>
+    <div class="col-sm-8">
+      <input type="password" class="form-control" id="importPassword" autocomplete="new-password" style="max-width: 400px">
+      <div class="text-info" style="margin-top: .5em">Used for this import only. It is not stored. Providers such as Gmail need an app password.</div>
+    </div>
+  </div>
+  <div class="form-group">
+    <div class="col-sm-offset-2 col-sm-8">
+      <div class="checkbox"><label><input type="checkbox" id="importSkipSpam" checked> Skip the Spam/Junk folder</label></div>
+      <div class="checkbox"><label><input type="checkbox" id="importVerify" checked> Verify the source server&rsquo;s TLS certificate</label></div>
+    </div>
+  </div>
+  <div class="form-group">
+    <div class="col-sm-offset-2 col-sm-8">
+      <button type="submit" class="btn btn-primary">Start Import</button>
+    </div>
+  </div>
+</form>
+
+<h3>Imports</h3>
+<table id="import_jobs" class="table" style="width: auto">
+  <thead><tr><th>Started</th><th>Into</th><th>From</th><th>Status</th><th aria-label="Actions"></th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<div id="import_detail" style="display: none">
+  <h4>Output</h4>
+  <pre id="import_log" style="max-height: 20em; overflow: auto"></pre>
+</div>
+
+<script>
+var import_timer = null;
+var import_selected = null;
+
+function import_security_changed() {
+  var s = $('#importSecurity').val();
+  $('#importPort').val(s == 'imaps' ? 993 : 143);
+}
+
+function show_import() {
+  api("/mail/users", "GET", { format: 'json' }, function(r) {
+    var sel = $('#importDest');
+    var current = sel.val();
+    sel.text('');
+    for (var i = 0; i < r.length; i++)
+      for (var k = 0; k < r[i].users.length; k++)
+        if (r[i].users[k].status == 'active')
+          sel.append($('<option/>').text(r[i].users[k].email));
+    if (current) sel.val(current);
+  });
+  import_refresh();
+}
+
+function import_refresh() {
+  if (import_timer) { clearTimeout(import_timer); import_timer = null; }
+  if (window.location.hash != '#import') return; // only poll while this page is showing
+  api("/mail/import", "GET", { }, function(jobs) {
+    var tb = $('#import_jobs tbody');
+    tb.text('');
+    var running = false;
+    jobs.forEach(function(j) {
+      var tr = $("<tr><td></td><td></td><td></td><td></td><td>[<a href='#' onclick='return import_show_log(this)'>output</a>]</td></tr>");
+      tr.attr('data-id', j.id);
+      var c = tr.find('td');
+      c.eq(0).text(new Date(j.started * 1000).toLocaleString());
+      c.eq(1).text(j.dest);
+      c.eq(2).text(j.username + '@' + j.host);
+      c.eq(3).text(j.state);
+      if (j.state == 'running') {
+        running = true;
+        c.eq(4).append(" [<a href='#' onclick='return import_cancel(this)'>cancel</a>]");
+      }
+      tb.append(tr);
+    });
+    if (jobs.length == 0) tb.html("<tr><td colspan='5' class='text-muted'>No imports yet.</td></tr>");
+    if (import_selected) import_load_log();
+    if (running) import_timer = setTimeout(import_refresh, 4000);
+  });
+}
+
+function import_start() {
+  api("/mail/import/start", "POST", {
+      email: $('#importDest').val(), host: $('#importHost').val(), port: $('#importPort').val(),
+      security: $('#importSecurity').val(), username: $('#importUser').val(), password: $('#importPassword').val(),
+      skip_spam: $('#importSkipSpam').is(':checked') ? '1' : '0', verify_cert: $('#importVerify').is(':checked') ? '1' : '0'
+    },
+    function(r) {
+      $('#importPassword').val('');
+      import_selected = r.id;
+      import_refresh();
+    },
+    function(r) { show_modal_error("Import Mail", $("<pre/>").text(r)); });
+  return false;
+}
+
+function import_show_log(elem) {
+  import_selected = $(elem).parents('tr').attr('data-id');
+  import_load_log();
+  return false;
+}
+
+function import_load_log() {
+  api("/mail/import/status", "GET", { id: import_selected }, function(j) {
+    $('#import_detail').show();
+    $('#import_log').text(j.log.length ? j.log.join("\n") : "(no output yet)");
+  });
+}
+
+function import_cancel(elem) {
+  api("/mail/import/cancel", "POST", { id: $(elem).parents('tr').attr('data-id') },
+    function(r) { import_refresh(); },
+    function(r) { show_modal_error("Import Mail", $("<pre/>").text(r)); });
+  return false;
+}
+</script>

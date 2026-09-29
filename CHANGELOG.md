@@ -1,3 +1,42 @@
+# MeetrMail 1.0.1 — Release Changelog
+
+**Released:** 29 September 2026
+**Based on:** MeetrMail 1.0.0
+
+MeetrMail 1.0.1 is the first release with its own control-panel features. Everything is added to the
+existing single admin login and follows the look of the existing pages.
+
+## New
+
+- **Custom DNS TTL.** Each custom record can have its own TTL, from 30 seconds to 30 days, set on the
+  Custom DNS page or with `?ttl=` on the API. Records without one keep the one-day default, and
+  existing custom records load unchanged. All values of one name and type share a TTL.
+- **Spam Filtering page** (Mail & Users menu). Global Rspamd score thresholds, thresholds for
+  individual mailboxes, allow and block lists for senders and IP addresses, Rspamd statistics, and a
+  browser for each mailbox's Spam folder with release and delete. Settings are kept under
+  `$STORAGE_ROOT/mail/rspamd/` and restored when setup is re-run. The administrator gets a nightly
+  summary of the last 24 hours of spam filtering.
+- **Quotas page** (Mail & Users menu). Storage used and allocated per domain and per mailbox, with a
+  default quota for new mailboxes on the Users page. Leaving the quota blank when adding a user now
+  uses the default.
+- **Import Mail page** (Mail & Users menu). Copies an account from another IMAP server into a mailbox
+  on this box, one-way and repeatable, using `doveadm sync`. The source password is never stored or
+  put on a command line.
+- **Fail2ban page** (System menu, Advanced Pages). Jails, failure and ban counts, banned addresses,
+  and manual ban and unban.
+
+## Fixed
+
+- Script files are committed with their executable bits. Earlier commits stored every file as
+  non-executable, so a clone could not run `setup/start.sh` without `chmod`.
+
+## Upgrading
+
+Update the source tree, then run `sudo meetrmail-setup`. No data migration is needed. Hard-reload the
+control panel afterwards (Ctrl+Shift+R) so the browser does not show the old menus.
+
+---
+
 # MeetrMail 1.0.0 — Release Changelog
 
 **Released:** 18 September 2026

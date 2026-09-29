@@ -4,7 +4,7 @@ MeetrMail is an independent, customized mail server stack based on v76 of the
 [Mail-in-a-Box](https://github.com/mail-in-a-box/mailinabox) project, ported from Ubuntu
 22.04 to 24.04. Same box, same one-command install, newer everything underneath.
 
-Version: **1.0.0** (see [VERSION](VERSION)). Branch: `noble-php83-py312-rspamd`, forked from upstream `v76`.
+Version: **1.0.1** (see [VERSION](VERSION)). Branch: `noble-php83-py312-rspamd`, forked from upstream `v76`.
 
 ---
 

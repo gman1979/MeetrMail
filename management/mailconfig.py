@@ -358,8 +358,8 @@ def add_mail_user(email, pw, privs, quota, env):
 			validation = validate_privilege(p)
 			if validation: return validation
 
-	if quota is None:
-		quota = '0'
+	if quota is None or quota.strip() == "":
+		quota = get_default_quota(env)
 
 	try:
 		quota = validate_quota(quota)
@@ -433,6 +433,67 @@ def set_mail_quota(email, quota, env):
 	dovecot_quota_recalc(email)
 
 	return "OK"
+
+def get_default_quota(env):
+	# The quota given to new mailboxes when none is specified. "0" is unlimited.
+	quota = str(utils.load_settings(env).get("default_quota", "0"))
+	try:
+		return validate_quota(quota)
+	except ValueError:
+		return "0"
+
+def set_default_quota(quota, env):
+	quota = validate_quota(quota) # raises ValueError
+	config = utils.load_settings(env)
+	config["default_quota"] = quota
+	utils.write_settings(config, env)
+	return "OK"
+
+def quota_to_bytes(quota):
+	# Convert a validated quota string such as "500M" or "2G" to bytes. 0 is unlimited.
+	quota = quota.strip().upper()
+	multiplier = {"M": 1024**2, "G": 1024**3}.get(quota[-1:], 1)
+	return int(quota.rstrip("MG")) * multiplier
+
+def get_quota_overview(env):
+	# Returns per-domain and per-user mailbox usage in bytes, for the quotas page:
+	#
+	# [ { domain, users: [ { email, quota_bytes, used_bytes, percent }, ... ],
+	#     used_bytes, allocated_bytes, unlimited_users }, ... ]
+	#
+	# quota_bytes is 0 for unlimited; used_bytes and percent are None if the usage
+	# is not known (no maildirsize file yet, e.g. a mailbox that never received mail).
+	domains = {}
+	c = open_database(env)
+	c.execute('SELECT email, quota FROM users')
+	rows = c.fetchall()
+	for email, quota in sorted(rows, key=lambda r: r[0]):
+		user, domain = email.split('@')
+		try:
+			quota_bytes = quota_to_bytes(quota)
+		except (ValueError, IndexError):
+			quota_bytes = 0
+
+		used_bytes = None
+		try:
+			with open(os.path.join(env['STORAGE_ROOT'], f'mail/mailboxes/{domain}/{user}/maildirsize'), encoding="utf-8") as f:
+				f.readline() # first line is the quota definition
+				used_bytes = sum(int(line.split(' ')[0]) for line in f if line.strip())
+		except (OSError, ValueError):
+			pass
+
+		percent = None
+		if used_bytes is not None and quota_bytes > 0:
+			percent = round(used_bytes / quota_bytes * 100, 1)
+
+		d = domains.setdefault(domain, { "domain": domain, "users": [], "used_bytes": 0, "allocated_bytes": 0, "unlimited_users": 0 })
+		d["users"].append({ "email": email, "quota": quota, "quota_bytes": quota_bytes, "used_bytes": used_bytes, "percent": percent })
+		d["used_bytes"] += used_bytes or 0
+		d["allocated_bytes"] += quota_bytes
+		if quota_bytes == 0:
+			d["unlimited_users"] += 1
+
+	return list(domains.values())
 
 def dovecot_quota_recalc(email):
 	# dovecot processes running for the user will not recognize the new quota setting

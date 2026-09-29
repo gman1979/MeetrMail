@@ -119,6 +119,7 @@
                 <li class="dropdown-header">Advanced Pages</li>
                 <li><a href="#custom_dns">Custom DNS</a></li>
                 <li><a href="#external_dns">External DNS</a></li>
+                <li><a href="#fail2ban">Fail2ban</a></li>
                 <li><a href="#munin">Munin Monitoring</a></li>
               </ul>
             </li>
@@ -129,6 +130,9 @@
                 <li><a href="#mail-guide">Instructions</a></li>
                 <li><a href="#users">Users</a></li>
                 <li><a href="#aliases">Aliases</a></li>
+                <li><a href="#quotas">Quotas</a></li>
+                <li><a href="#import">Import Mail</a></li>
+                <li><a href="#spam">Spam Filtering</a></li>
                 <li class="divider"></li>
                 <li class="dropdown-header">Your Account</li>
                 <li><a href="#mfa">Two-Factor Authentication</a></li>
@@ -145,6 +149,22 @@
     </div>
 
     <div class="container">
+      <div id="panel_import" class="admin_panel">
+      {% include "imap-import.html" %}
+      </div>
+
+      <div id="panel_spam" class="admin_panel">
+      {% include "spam.html" %}
+      </div>
+
+      <div id="panel_fail2ban" class="admin_panel">
+      {% include "fail2ban.html" %}
+      </div>
+
+      <div id="panel_quotas" class="admin_panel">
+      {% include "quotas.html" %}
+      </div>
+
       <div id="panel_welcome" class="admin_panel">
       {% include "welcome.html" %}
       </div>

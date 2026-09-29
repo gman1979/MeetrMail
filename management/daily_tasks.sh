@@ -15,6 +15,9 @@ if [ "$(date "+%u")" -eq 1 ]; then
     management/mail_log.py -t week | management/email_administrator.py "MeetrMail Usage Report"
 fi
 
+# Send the administrator a summary of the last day of spam filtering.
+management/spam.py --digest | management/email_administrator.py "Spam Filtering Summary"
+
 # Take a backup.
 management/backup.py 2>&1 | management/email_administrator.py "Backup Status"
 

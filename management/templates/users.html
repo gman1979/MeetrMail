@@ -30,7 +30,7 @@
   </div>
   <div class="form-group">
       <label class="sr-only" for="adduserQuota">Quota</label>
-      <input type="text" class="form-control" id="adduserQuota" placeholder="Quota" style="width:5em;" value="0">
+      <input type="text" class="form-control" id="adduserQuota" placeholder="Quota" title="Leave blank to use the default quota" style="width:6em;" value="">
   </div>
   <button type="submit" class="btn btn-primary">Add User</button>
 </form>
@@ -39,8 +39,17 @@
   <li>Use <a href="#aliases">aliases</a> to create email addresses that forward to existing accounts.</li>
   <li>Administrators get access to this control panel.</li>
   <li>User accounts cannot contain any international (non-ASCII) characters, but <a href="#aliases">aliases</a> can.</li>
-  <li>Quotas may not contain any spaces, commas or decimal points. Suffixes of G (gigabytes) and M (megabytes) are allowed.  For unlimited storage enter 0 (zero)</li>
+  <li>Quotas may not contain any spaces, commas or decimal points. Suffixes of G (gigabytes) and M (megabytes) are allowed.  For unlimited storage enter 0 (zero). Leave the quota blank to use the default below.</li>
 </ul>
+
+<form class="form-inline" role="form" onsubmit="return do_set_default_quota();" style="margin-top: 1em;">
+  <div class="form-group">
+    <label for="defaultQuota">Default quota for new mailboxes:</label>
+    <input type="text" class="form-control" id="defaultQuota" style="width:6em;" value="0">
+  </div>
+  <button type="submit" class="btn btn-default">Save</button>
+  <span class="text-muted" style="margin-left: 1em;">0 means unlimited. See <a href="#quotas">Quotas</a> for usage by domain.</span>
+</form>
 
 <h3>Existing mail users</h3>
 <table id="user_table" class="table" style="width: auto">
@@ -162,7 +171,23 @@ curl -X POST -d "email=new_user@mydomail.com" https://{{hostname}}/admin/mail/us
 </pre>
 
 <script>
+function do_set_default_quota() {
+  api("/system/default-quota", "POST", { default_quota: $("#defaultQuota").val() },
+    function(r) {
+      show_modal_error("Default Quota", $("<pre/>").text(r));
+      show_users();
+    },
+    function(r) {
+      show_modal_error("Default Quota", $("<pre/>").text(r));
+    });
+  return false;
+}
+
 function show_users() {
+  api("/system/default-quota", "GET", { }, function(r) {
+    $("#defaultQuota").val(r.default_quota);
+    $("#adduserQuota").attr("placeholder", r.default_quota == "0" ? "default (unlimited)" : "default (" + r.default_quota + ")");
+  });
   $('#user_table tbody').html("<tr><td colspan='2' class='text-muted'>Loading...</td></tr>")
   api(
     "/mail/users",

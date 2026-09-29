@@ -1,0 +1,113 @@
+<h2>Fail2ban</h2>
+
+<p>Fail2ban watches the logs for repeated failed logins and temporarily blocks the addresses responsible. This page shows each jail and lets you release an address that was blocked by mistake, or block one by hand.</p>
+
+<div id="fail2ban-error" class="alert alert-danger" style="display: none"></div>
+
+<table id="fail2ban_table" class="table" style="width: auto">
+  <thead>
+    <tr>
+      <th scope="col">Jail</th>
+      <th scope="col" class="text-right">Failed now</th>
+      <th scope="col" class="text-right">Failed total</th>
+      <th scope="col" class="text-right">Banned now</th>
+      <th scope="col" class="text-right">Banned total</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+
+<h3>Banned addresses</h3>
+<table id="fail2ban_banned" class="table" style="width: auto">
+  <thead>
+    <tr>
+      <th scope="col">Address</th>
+      <th scope="col">Jail</th>
+      <th scope="col" aria-label="Actions"></th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+
+<h3>Ban an address</h3>
+<form class="form-inline" role="form" onsubmit="return fail2ban_ban();">
+  <div class="form-group">
+    <label class="sr-only" for="fail2banBanIp">IP address</label>
+    <input type="text" class="form-control" id="fail2banBanIp" placeholder="IP address">
+  </div>
+  <div class="form-group">
+    <label class="sr-only" for="fail2banBanJail">Jail</label>
+    <select class="form-control" id="fail2banBanJail"></select>
+  </div>
+  <button type="submit" class="btn btn-default">Ban</button>
+</form>
+
+<ul style="margin-top: 1em; padding-left: 1.5em; font-size: 90%;">
+  <li>Bans expire on their own after the jail&rsquo;s ban time. A manual ban lasts as long as an automatic one.</li>
+  <li>This box&rsquo;s own public IP addresses are never banned.</li>
+</ul>
+
+<script>
+function show_fail2ban() {
+  $('#fail2ban_table tbody').html("<tr><td colspan='5' class='text-muted'>Loading...</td></tr>");
+  $('#fail2ban_banned tbody').text('');
+  api("/system/fail2ban", "GET", { }, function(r) {
+    if (r.error) $('#fail2ban-error').text(r.error).show(); else $('#fail2ban-error').hide();
+
+    var tbody = $('#fail2ban_table tbody');
+    var banned = $('#fail2ban_banned tbody');
+    var select = $('#fail2banBanJail');
+    tbody.text('');
+    banned.text('');
+    select.text('');
+    for (var i = 0; i < r.jails.length; i++) {
+      var j = r.jails[i];
+      var tr = $("<tr><td></td><td class='text-right'></td><td class='text-right'></td><td class='text-right'></td><td class='text-right'></td></tr>");
+      var cells = tr.find('td');
+      cells.eq(0).text(j.name);
+      cells.eq(1).text(j.currently_failed);
+      cells.eq(2).text(j.total_failed);
+      cells.eq(3).text(j.currently_banned);
+      cells.eq(4).text(j.total_banned);
+      tbody.append(tr);
+      select.append($('<option/>').text(j.name));
+
+      for (var k = 0; k < j.banned_ips.length; k++) {
+        var b = $("<tr><td></td><td></td><td>[<a href='#' onclick='return fail2ban_unban(this)'>unban</a>]</td></tr>");
+        b.attr('data-jail', j.name);
+        b.attr('data-ip', j.banned_ips[k]);
+        b.find('td').eq(0).text(j.banned_ips[k]);
+        b.find('td').eq(1).text(j.name);
+        banned.append(b);
+      }
+    }
+    if (r.jails.length == 0)
+      tbody.html("<tr><td colspan='5' class='text-muted'>No jails found.</td></tr>");
+    if (banned.children().length == 0)
+      banned.html("<tr><td colspan='3' class='text-muted'>No addresses are banned right now.</td></tr>");
+  });
+}
+
+function fail2ban_unban(elem) {
+  var tr = $(elem).parents('tr');
+  var jail = tr.attr('data-jail');
+  var ip = tr.attr('data-ip');
+  show_modal_confirm("Unban", "Unban " + ip + " from " + jail + "?", "Unban", function() {
+    api("/system/fail2ban/unban", "POST", { jail: jail, ip: ip },
+      function(r) { show_modal_error("Fail2ban", $("<pre/>").text(r)); show_fail2ban(); },
+      function(r) { show_modal_error("Fail2ban", $("<pre/>").text(r)); });
+  });
+  return false;
+}
+
+function fail2ban_ban() {
+  var ip = $('#fail2banBanIp').val();
+  var jail = $('#fail2banBanJail').val();
+  api("/system/fail2ban/ban", "POST", { jail: jail, ip: ip },
+    function(r) { $('#fail2banBanIp').val(''); show_modal_error("Fail2ban", $("<pre/>").text(r)); show_fail2ban(); },
+    function(r) { show_modal_error("Fail2ban", $("<pre/>").text(r)); });
+  return false;
+}
+</script>
