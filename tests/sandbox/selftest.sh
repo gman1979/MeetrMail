@@ -596,6 +596,17 @@ else
 	fi
 fi
 
+# The control panel pages added in 1.0.1. Each returns JSON when the API answers.
+if [ -n "$api_key" ]; then
+	for endpoint in /mail/quotas /system/default-quota /system/fail2ban /spam/overview /mail/import; do
+		if curl -sf -u "$api_key:" "http://127.0.0.1:10222$endpoint" | python3 -c 'import json,sys; json.load(sys.stdin)' > /dev/null 2>&1; then
+			ok "the management API serves $endpoint"
+		else
+			fail "the management API serves $endpoint"
+		fi
+	done
+fi
+
 for path in /admin /mail /cloud; do
 	code=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1$path" --resolve "$PRIMARY_HOSTNAME:443:127.0.0.1" -H "Host: $PRIMARY_HOSTNAME")
 	if [[ "$code" =~ ^(200|301|302|303)$ ]]; then

@@ -189,7 +189,7 @@ def mail_users():
 @app.route('/mail/users/add', methods=['POST'])
 @authorized_personnel_only
 def mail_users_add():
-	quota = request.form.get('quota', '0')
+	quota = request.form.get('quota') # None or empty => the default quota
 	try:
 		return add_mail_user(request.form.get('email', ''), request.form.get('password', ''), request.form.get('privileges', ''), quota, env)
 	except ValueError as e:
@@ -214,6 +214,27 @@ def get_mail_users_quota():
 def mail_users_quota():
 	try:
 		return set_mail_quota(request.form.get('email', ''), request.form.get('quota'), env)
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/mail/quotas')
+@authorized_personnel_only
+def mail_quotas():
+	from mailconfig import get_quota_overview
+	return json_response(get_quota_overview(env))
+
+@app.route('/system/default-quota', methods=['GET'])
+@authorized_personnel_only
+def default_quota_get():
+	from mailconfig import get_default_quota
+	return json_response({ "default_quota": get_default_quota(env) })
+
+@app.route('/system/default-quota', methods=['POST'])
+@authorized_personnel_only
+def default_quota_set():
+	from mailconfig import set_default_quota
+	try:
+		return set_default_quota(request.form.get('default_quota', ''), env)
 	except ValueError as e:
 		return (str(e), 400)
 
@@ -313,8 +334,9 @@ def dns_set_secondary_nameserver():
 @authorized_personnel_only
 def dns_get_records(qname=None, rtype=None):
 	# Get the current set of custom DNS records.
-	from dns_update import get_custom_dns_config, get_dns_zones
+	from dns_update import get_custom_dns_config, get_custom_dns_ttls, get_dns_zones
 	records = get_custom_dns_config(env, only_real_records=True)
+	ttls = get_custom_dns_ttls(env)
 
 	# Filter per the arguments for the more complex GET routes below.
 	records = [r for r in records
@@ -327,6 +349,7 @@ def dns_get_records(qname=None, rtype=None):
                 "qname": r[0],
                 "rtype": r[1],
                 "value": r[2],
+		"ttl": ttls.get((r[0], r[1], r[2])), # None => default TTL
 		"sort-order": { },
         } for r in records ]
 
@@ -402,7 +425,11 @@ def dns_set_record(qname, rtype="A"):
 				pass
 			action = "remove"
 
-		if set_custom_dns_record(qname, rtype, value, action, env):
+		# An optional TTL (seconds) for the record comes from the query string
+		# since the request body is taken up by the value.
+		ttl = request.args.get("ttl") if action in {"add", "set"} else None
+
+		if set_custom_dns_record(qname, rtype, value, action, env, ttl=ttl):
 			return do_dns_update(env) or "Something isn't right."
 		return "OK"
 
@@ -670,6 +697,135 @@ def privacy_status_set():
 	config["privacy"] = (request.form.get('value') == "private")
 	utils.write_settings(config, env)
 	return "OK"
+
+# IMAP IMPORT
+
+@app.route('/mail/import')
+@authorized_personnel_only
+def mail_import_list():
+	from imap_import import list_jobs
+	return json_response(list_jobs(env))
+
+@app.route('/mail/import/start', methods=['POST'])
+@authorized_personnel_only
+def mail_import_start():
+	from imap_import import start_import
+	try:
+		job_id = start_import(env, request.form.get('email', ''), request.form.get('host', ''), request.form.get('port', '993'),
+			request.form.get('security', 'imaps'), request.form.get('username', ''), request.form.get('password', ''),
+			request.form.get('verify_cert', '1') == '1', request.form.get('skip_spam', '1') == '1')
+		return json_response({ "id": job_id })
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/mail/import/status')
+@authorized_personnel_only
+def mail_import_status():
+	from imap_import import get_job
+	try:
+		return json_response(get_job(env, request.args.get('id', '')))
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/mail/import/cancel', methods=['POST'])
+@authorized_personnel_only
+def mail_import_cancel():
+	from imap_import import cancel_import
+	try:
+		return cancel_import(env, request.form.get('id', ''))
+	except ValueError as e:
+		return (str(e), 400)
+
+# SPAM FILTERING (RSPAMD)
+
+@app.route('/spam/overview')
+@authorized_personnel_only
+def spam_overview():
+	from spam import get_overview
+	return json_response(get_overview(env))
+
+@app.route('/spam/thresholds', methods=['POST'])
+@authorized_personnel_only
+def spam_thresholds():
+	from spam import set_thresholds
+	try:
+		return set_thresholds(env, request.form)
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/spam/lists', methods=['POST'])
+@authorized_personnel_only
+def spam_lists():
+	from spam import change_list
+	try:
+		return change_list(env, request.form.get('list', ''), request.form.get('action', ''), request.form.get('value', ''))
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/spam/user-thresholds', methods=['POST'])
+@authorized_personnel_only
+def spam_user_thresholds():
+	from spam import set_user_thresholds
+	try:
+		return set_user_thresholds(env, request.form.get('email', ''), request.form, remove=request.form.get('remove') == '1')
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/spam/folder')
+@authorized_personnel_only
+def spam_folder():
+	from spam import list_spam_folder
+	try:
+		return json_response(list_spam_folder(env, request.args.get('email', '')))
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/spam/folder/release', methods=['POST'])
+@authorized_personnel_only
+def spam_folder_release():
+	from spam import release_spam_message
+	try:
+		return release_spam_message(env, request.form.get('email', ''), request.form.get('uid', ''))
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/spam/folder/delete', methods=['POST'])
+@authorized_personnel_only
+def spam_folder_delete():
+	from spam import delete_spam_message
+	try:
+		return delete_spam_message(env, request.form.get('email', ''), request.form.get('uid', ''))
+	except ValueError as e:
+		return (str(e), 400)
+
+# FAIL2BAN
+
+@app.route('/system/fail2ban')
+@authorized_personnel_only
+def fail2ban_status():
+	from fail2ban_admin import get_fail2ban_status
+	try:
+		return json_response(get_fail2ban_status())
+	except ValueError as e:
+		return json_response({ "error": str(e), "jails": [] })
+
+@app.route('/system/fail2ban/unban', methods=['POST'])
+@authorized_personnel_only
+def fail2ban_unban():
+	from fail2ban_admin import unban_ip
+	try:
+		return unban_ip(request.form.get('jail', ''), request.form.get('ip', ''))
+	except ValueError as e:
+		return (str(e), 400)
+
+@app.route('/system/fail2ban/ban', methods=['POST'])
+@authorized_personnel_only
+def fail2ban_ban():
+	from fail2ban_admin import ban_ip
+	try:
+		return ban_ip(request.form.get('jail', ''), request.form.get('ip', ''))
+	except ValueError as e:
+		return (str(e), 400)
 
 # MUNIN
 

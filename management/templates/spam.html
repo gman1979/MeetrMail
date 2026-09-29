@@ -1,0 +1,285 @@
+<style>
+#spam-lists h4 { margin-top: 1.5em; }
+#spam-lists ul { list-style: none; padding-left: 0; }
+#spam-lists li { padding: 2px 0; }
+#spam_folder td.subject { word-break: break-word; max-width: 30em; }
+</style>
+
+<h2>Spam Filtering</h2>
+
+<p>Spam filtering is done by <a href="https://rspamd.com">Rspamd</a>. Every message gets a score. Above the <b>greylist</b> threshold a first-time sender is asked to try again shortly, above <b>add header</b> the message is marked as spam and filed in the Spam folder, and above <b>reject</b> it is refused outright. Nothing is ever silently discarded.</p>
+
+<div id="spam-error" class="alert alert-danger" style="display: none"></div>
+
+<h3>Activity</h3>
+<table id="spam_stats" class="table" style="width: auto">
+  <tbody><tr><td class="text-muted">Loading...</td></tr></tbody>
+</table>
+<p class="small text-muted">Counts are since Rspamd last started. A summary of the last 24 hours is also emailed to the administrator every night.</p>
+
+<h3>Thresholds</h3>
+<form class="form-inline" role="form" onsubmit="return spam_save_thresholds();">
+  <div class="form-group">
+    <label for="spamGreylist">Greylist</label>
+    <input type="number" step="0.1" min="0" max="100" class="form-control" id="spamGreylist" style="width:6em;">
+  </div>
+  <div class="form-group">
+    <label for="spamAddHeader">Add header</label>
+    <input type="number" step="0.1" min="0" max="100" class="form-control" id="spamAddHeader" style="width:6em;">
+  </div>
+  <div class="form-group">
+    <label for="spamReject">Reject</label>
+    <input type="number" step="0.1" min="0" max="100" class="form-control" id="spamReject" style="width:6em;">
+  </div>
+  <button type="submit" class="btn btn-primary">Save</button>
+  <a href="#" onclick="return spam_reset_thresholds();" style="margin-left: 1em;">reset to defaults</a>
+</form>
+<ul style="margin-top: 1em; padding-left: 1.5em; font-size: 90%;">
+  <li>Lower numbers are stricter. The thresholds must be in increasing order: greylist &le; add header &le; reject. Setting the greylist equal to add header turns greylisting off.</li>
+  <li>The defaults are 4, 6 and 15. The reject threshold is deliberately high: on a personal mail server a wrongly refused message costs more than a spam in the Spam folder.</li>
+</ul>
+
+<h3>Thresholds for one mailbox</h3>
+<p>Give a mailbox its own thresholds, for example a stricter setting for an address that receives a lot of spam.</p>
+<table id="spam_user_thresholds" class="table" style="width: auto">
+  <thead><tr><th>Mailbox</th><th class="text-right">Greylist</th><th class="text-right">Add header</th><th class="text-right">Reject</th><th aria-label="Actions"></th></tr></thead>
+  <tbody></tbody>
+</table>
+<form class="form-inline" role="form" onsubmit="return spam_save_user_thresholds();">
+  <div class="form-group">
+    <label class="sr-only" for="spamUserEmail">Mailbox</label>
+    <select class="form-control" id="spamUserEmail"></select>
+  </div>
+  <div class="form-group">
+    <input type="number" step="0.1" min="0" max="100" class="form-control" id="spamUserGreylist" placeholder="Greylist" style="width:7em;">
+    <input type="number" step="0.1" min="0" max="100" class="form-control" id="spamUserAddHeader" placeholder="Add header" style="width:8em;">
+    <input type="number" step="0.1" min="0" max="100" class="form-control" id="spamUserReject" placeholder="Reject" style="width:7em;">
+  </div>
+  <button type="submit" class="btn btn-default">Set</button>
+</form>
+
+<h3>Allow and block lists</h3>
+<div id="spam-lists">
+  <div class="row">
+    <div class="col-sm-6">
+      <h4>Allowed senders</h4>
+      <ul id="list_allow_senders"></ul>
+      <form class="form-inline" onsubmit="return spam_list_add('allow_senders');">
+        <input type="text" class="form-control" id="add_allow_senders" placeholder="user@example.com or example.com">
+        <button type="submit" class="btn btn-default">Add</button>
+      </form>
+      <p class="small text-muted">Only honoured when the message passes SPF or DKIM, so a forged sender is not let through.</p>
+    </div>
+    <div class="col-sm-6">
+      <h4>Blocked senders</h4>
+      <ul id="list_block_senders"></ul>
+      <form class="form-inline" onsubmit="return spam_list_add('block_senders');">
+        <input type="text" class="form-control" id="add_block_senders" placeholder="user@example.com or example.com">
+        <button type="submit" class="btn btn-default">Add</button>
+      </form>
+      <p class="small text-muted">Refused at delivery, before the message is accepted.</p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-sm-6">
+      <h4>Allowed IP addresses</h4>
+      <ul id="list_allow_ips"></ul>
+      <form class="form-inline" onsubmit="return spam_list_add('allow_ips');">
+        <input type="text" class="form-control" id="add_allow_ips" placeholder="203.0.113.7 or 203.0.113.0/24">
+        <button type="submit" class="btn btn-default">Add</button>
+      </form>
+    </div>
+    <div class="col-sm-6">
+      <h4>Blocked IP addresses</h4>
+      <ul id="list_block_ips"></ul>
+      <form class="form-inline" onsubmit="return spam_list_add('block_ips');">
+        <input type="text" class="form-control" id="add_block_ips" placeholder="203.0.113.7 or 203.0.113.0/24">
+        <button type="submit" class="btn btn-default">Add</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<h3>Spam folders</h3>
+<p>Look through a mailbox&rsquo;s Spam folder. Release moves a message back to the Inbox; Delete removes it for good.</p>
+<form class="form-inline" role="form" onsubmit="return spam_show_folder();">
+  <div class="form-group">
+    <label class="sr-only" for="spamFolderEmail">Mailbox</label>
+    <select class="form-control" id="spamFolderEmail"></select>
+  </div>
+  <button type="submit" class="btn btn-default">Show</button>
+</form>
+<div id="spam_folder_note" class="small text-muted" style="margin-top: .5em"></div>
+<table id="spam_folder" class="table" style="width: auto; display: none; margin-top: 1em;">
+  <thead><tr><th>Received</th><th>From</th><th>Subject</th><th class="text-right">Score</th><th aria-label="Actions"></th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<script>
+var spam_defaults = { greylist: 4, add_header: 6, reject: 15 };
+
+function spam_error(title, r) {
+  show_modal_error(title, $("<pre/>").text(r));
+}
+
+function show_spam() {
+  api("/mail/users", "GET", { format: 'json' }, function(r) {
+    var sel = $('#spamUserEmail, #spamFolderEmail');
+    sel.text('');
+    for (var i = 0; i < r.length; i++)
+      for (var k = 0; k < r[i].users.length; k++)
+        if (r[i].users[k].status == 'active')
+          sel.append($('<option/>').text(r[i].users[k].email));
+  });
+
+  api("/spam/overview", "GET", { }, function(r) {
+    // Activity.
+    var st = r.stats;
+    var tb = $('#spam_stats tbody');
+    tb.text('');
+    if (!st.available) {
+      $('#spam-error').text(st.error).show();
+    } else {
+      $('#spam-error').hide();
+      var rows = [["Messages scanned", st.scanned]];
+      var order = ["no action", "greylist", "add header", "rewrite subject", "soft reject", "reject"];
+      for (var i = 0; i < order.length; i++)
+        if (st.actions[order[i]] !== undefined) rows.push([" " + order[i], st.actions[order[i]]]);
+      rows.push(["Learned as spam", st.bayes.spam]);
+      rows.push(["Learned as not spam", st.bayes.ham]);
+      for (var j = 0; j < rows.length; j++) {
+        var tr = $("<tr><td></td><td class='text-right'></td></tr>");
+        tr.find('td').eq(0).text(rows[j][0]);
+        tr.find('td').eq(1).text(rows[j][1]);
+        tb.append(tr);
+      }
+    }
+
+    // Thresholds.
+    spam_defaults = r.defaults;
+    $('#spamGreylist').val(r.thresholds.greylist);
+    $('#spamAddHeader').val(r.thresholds.add_header);
+    $('#spamReject').val(r.thresholds.reject);
+
+    // Per-mailbox thresholds.
+    var ub = $('#spam_user_thresholds tbody');
+    ub.text('');
+    var emails = Object.keys(r.user_thresholds).sort();
+    for (var u = 0; u < emails.length; u++) {
+      var t = r.user_thresholds[emails[u]];
+      var tr = $("<tr><td></td><td class='text-right'></td><td class='text-right'></td><td class='text-right'></td><td>[<a href='#' onclick='return spam_remove_user_thresholds(this)'>remove</a>]</td></tr>");
+      tr.attr('data-email', emails[u]);
+      var c = tr.find('td');
+      c.eq(0).text(emails[u]); c.eq(1).text(t.greylist); c.eq(2).text(t.add_header); c.eq(3).text(t.reject);
+      ub.append(tr);
+    }
+    if (emails.length == 0)
+      ub.html("<tr><td colspan='5' class='text-muted'>None. All mailboxes use the thresholds above.</td></tr>");
+
+    // Lists.
+    ["allow_senders", "block_senders", "allow_ips", "block_ips"].forEach(function(kind) {
+      var ul = $('#list_' + kind);
+      ul.text('');
+      r.lists[kind].forEach(function(v) {
+        var li = $("<li><span></span> [<a href='#' onclick='return spam_list_remove(this)'>remove</a>]</li>");
+        li.attr('data-list', kind);
+        li.attr('data-value', v);
+        li.find('span').text(v);
+        ul.append(li);
+      });
+      if (r.lists[kind].length == 0) ul.append($("<li class='text-muted'>None</li>"));
+    });
+  });
+}
+
+function spam_save_thresholds() {
+  api("/spam/thresholds", "POST", {
+      greylist: $('#spamGreylist').val(), add_header: $('#spamAddHeader').val(), reject: $('#spamReject').val()
+    },
+    function(r) { spam_error("Spam Thresholds", r); show_spam(); },
+    function(r) { spam_error("Spam Thresholds", r); });
+  return false;
+}
+
+function spam_reset_thresholds() {
+  $('#spamGreylist').val(spam_defaults.greylist);
+  $('#spamAddHeader').val(spam_defaults.add_header);
+  $('#spamReject').val(spam_defaults.reject);
+  return spam_save_thresholds();
+}
+
+function spam_save_user_thresholds() {
+  api("/spam/user-thresholds", "POST", {
+      email: $('#spamUserEmail').val(),
+      greylist: $('#spamUserGreylist').val(), add_header: $('#spamUserAddHeader').val(), reject: $('#spamUserReject').val()
+    },
+    function(r) { show_spam(); },
+    function(r) { spam_error("Mailbox Thresholds", r); });
+  return false;
+}
+
+function spam_remove_user_thresholds(elem) {
+  api("/spam/user-thresholds", "POST", { email: $(elem).parents('tr').attr('data-email'), remove: '1' },
+    function(r) { show_spam(); },
+    function(r) { spam_error("Mailbox Thresholds", r); });
+  return false;
+}
+
+function spam_list_add(kind) {
+  api("/spam/lists", "POST", { list: kind, action: 'add', value: $('#add_' + kind).val() },
+    function(r) { $('#add_' + kind).val(''); show_spam(); },
+    function(r) { spam_error("Spam Lists", r); });
+  return false;
+}
+
+function spam_list_remove(elem) {
+  var li = $(elem).parents('li');
+  api("/spam/lists", "POST", { list: li.attr('data-list'), action: 'remove', value: li.attr('data-value') },
+    function(r) { show_spam(); },
+    function(r) { spam_error("Spam Lists", r); });
+  return false;
+}
+
+function spam_fmt_size(n) {
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' M' : (n >= 1024 ? Math.round(n / 1024) + ' K' : n + ' B');
+}
+
+function spam_show_folder() {
+  var email = $('#spamFolderEmail').val();
+  $('#spam_folder_note').text('Loading...');
+  api("/spam/folder", "GET", { email: email }, function(r) {
+    var tb = $('#spam_folder tbody');
+    tb.text('');
+    $('#spam_folder').toggle(r.messages.length > 0);
+    if (r.error) { $('#spam_folder_note').text(r.error); return; }
+    $('#spam_folder_note').text(r.total == 0 ? 'The Spam folder is empty.'
+      : (r.total > r.messages.length ? 'Showing the newest ' + r.messages.length + ' of ' + r.total + ' messages.' : r.total + ' message' + (r.total == 1 ? '' : 's') + '.'));
+    r.messages.forEach(function(m) {
+      var tr = $("<tr><td></td><td></td><td class='subject'></td><td class='text-right'></td><td style='white-space: nowrap'>[<a href='#' onclick='return spam_release(this)'>release</a>] [<a href='#' onclick='return spam_delete(this)'>delete</a>]</td></tr>");
+      tr.attr('data-email', email);
+      tr.attr('data-uid', m.uid);
+      var c = tr.find('td');
+      c.eq(0).text(m.received); c.eq(1).text(m.from); c.eq(2).text(m.subject); c.eq(3).text(m.score === null ? '' : m.score);
+      tb.append(tr);
+    });
+  }, function(r) { $('#spam_folder_note').text(''); spam_error("Spam Folder", r); });
+  return false;
+}
+
+function spam_message_action(elem, url) {
+  var tr = $(elem).parents('tr');
+  api(url, "POST", { email: tr.attr('data-email'), uid: tr.attr('data-uid') },
+    function(r) { spam_show_folder(); },
+    function(r) { spam_error("Spam Folder", r); });
+  return false;
+}
+
+function spam_release(elem) { return spam_message_action(elem, "/spam/folder/release"); }
+
+function spam_delete(elem) {
+  show_modal_confirm("Delete message", "Permanently delete this message?", "Delete", function() {
+    spam_message_action(elem, "/spam/folder/delete");
+  });
+  return false;
+}
+</script>

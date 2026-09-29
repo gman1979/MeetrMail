@@ -1,0 +1,76 @@
+<style>
+#quota_table .quota-bar { width: 12em; height: 1.1em; background: #eee; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+#quota_table .quota-bar > div { height: 100%; background: #5cb85c; }
+#quota_table .quota-bar > div.warn { background: #f0ad4e; }
+#quota_table .quota-bar > div.crit { background: #d9534f; }
+#quota_table td.num, #quota_table th.num { text-align: right; }
+</style>
+
+<h2>Quotas</h2>
+
+<p>Mailbox storage used by each domain and user. Change a user&rsquo;s quota on the <a href="#users">Users</a> page, and the default for new mailboxes there too.</p>
+
+<table id="quota_table" class="table" style="width: auto">
+  <thead>
+    <tr>
+      <th scope="col">Domain / User</th>
+      <th scope="col" class="num">Used</th>
+      <th scope="col" class="num">Quota</th>
+      <th scope="col">Usage</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+
+<script>
+function quota_fmt_bytes(n) {
+  if (n === null || n === undefined) return '?';
+  var units = ['B', 'K', 'M', 'G', 'T'];
+  var i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i == 0 ? n : n.toFixed(n >= 100 ? 0 : 1)) + ' ' + units[i];
+}
+
+function quota_bar(percent) {
+  if (percent === null || percent === undefined) return $('<span class="text-muted"/>').text('\u2014');
+  var cls = percent >= 90 ? 'crit' : (percent >= 80 ? 'warn' : '');
+  var bar = $('<span class="quota-bar"><div/></span>');
+  bar.find('div').addClass(cls).css('width', Math.min(percent, 100) + '%');
+  return $('<span/>').append(bar).append($('<span/>').text(' ' + percent + '%'));
+}
+
+function show_quotas() {
+  $('#quota_table tbody').html("<tr><td colspan='4' class='text-muted'>Loading...</td></tr>");
+  api("/mail/quotas", "GET", { }, function(r) {
+    var tbody = $('#quota_table tbody');
+    tbody.text('');
+    if (r.length == 0) {
+      tbody.html("<tr><td colspan='4' class='text-muted'>No mail users yet.</td></tr>");
+      return;
+    }
+    for (var i = 0; i < r.length; i++) {
+      var d = r[i];
+      var hdr = $("<tr style='background-color: #EEE'><th role='heading' aria-level='4'></th><th class='num'></th><th class='num'></th><th></th></tr>");
+      hdr.find('th').eq(0).text(d.domain);
+      hdr.find('th').eq(1).text(quota_fmt_bytes(d.used_bytes));
+      var alloc = d.allocated_bytes > 0 ? quota_fmt_bytes(d.allocated_bytes) + ' allocated' : '';
+      if (d.unlimited_users > 0) alloc += (alloc ? ' + ' : '') + d.unlimited_users + ' unlimited';
+      hdr.find('th').eq(2).text(alloc);
+      tbody.append(hdr);
+
+      // Fullest mailboxes first; unlimited/unknown last.
+      var users = d.users.slice().sort(function(a, b) { return (b.percent === null ? -1 : b.percent) - (a.percent === null ? -1 : a.percent); });
+      for (var k = 0; k < users.length; k++) {
+        var u = users[k];
+        var tr = $("<tr><td></td><td class='num'></td><td class='num'></td><td></td></tr>");
+        tr.find('td').eq(0).text(u.email);
+        tr.find('td').eq(1).text(quota_fmt_bytes(u.used_bytes));
+        tr.find('td').eq(2).text(u.quota_bytes == 0 ? 'unlimited' : u.quota);
+        tr.find('td').eq(3).append(quota_bar(u.percent));
+        tbody.append(tr);
+      }
+    }
+  });
+}
+</script>

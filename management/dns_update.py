@@ -230,10 +230,14 @@ def build_zone(domain, domain_properties, additional_records, env, is_zone=True)
 
 	# The user may set other records that don't conflict with our settings.
 	# Don't put any TXT records above this line, or it'll prevent any custom TXT records.
+	custom_ttls = get_custom_dns_ttls(env)
 	for qname, rtype, value in filter_custom_records(domain, additional_records):
 		# Don't allow custom records for record types that override anything above.
 		# But allow multiple custom records for the same rtype --- see how has_rec_base is used.
 		if has_rec(qname, rtype): continue
+
+		# Look up the record's optional TTL by its name as stored on disk (before any "local" substitution).
+		ttl = custom_ttls.get((domain if qname is None else qname + "." + domain, rtype, value))
 
 		# The "local" keyword on A/AAAA records are short-hand for our own IP.
 		# This also flags for web configuration that the user wants a website here.
@@ -244,7 +248,7 @@ def build_zone(domain, domain_properties, additional_records, env, is_zone=True)
 				value = env["PUBLIC_IPV6"]
 			else:
 				continue
-		records.append((qname, rtype, value, "(Set by user.)"))
+		records.append((qname, rtype, value, UserRecordExplanation("(Set by user.)", ttl)))
 
 	# Add A/AAAA defaults if not overridden by the user's custom settings (and not otherwise configured).
 	# Any CNAME or A record on the qname overrides A and AAAA. But when we set the default A record,
@@ -505,7 +509,8 @@ $TTL 86400          ; default time to live
 	for subdomain, querytype, value, _explanation in records:
 		if subdomain:
 			zone += subdomain
-		zone += "\tIN\t" + querytype + "\t"
+		ttl = getattr(_explanation, "ttl", None) # per-record TTL set by the user, if any
+		zone += "\t" + (str(ttl) + "\t" if ttl else "") + "IN\t" + querytype + "\t"
 		if querytype == "TXT":
 			# Divide into 255-byte max substrings.
 			v2 = ""
@@ -799,13 +804,41 @@ def write_opendkim_tables(domains, env):
 
 ########################################################################
 
-def get_custom_dns_config(env, only_real_records=False):
+# Custom records may carry an optional per-record TTL (in seconds). On disk a value is
+# either a plain string (default TTL, the original format) or a mapping {value: ..., ttl: ...}.
+MIN_CUSTOM_TTL = 30
+MAX_CUSTOM_TTL = 2592000 # 30 days
+
+def validate_custom_ttl(ttl):
+	# Returns an int, or None for "use the default". Raises ValueError if invalid.
+	if ttl is None or (isinstance(ttl, str) and ttl.strip() == ""):
+		return None
+	try:
+		ttl = int(ttl)
+	except (TypeError, ValueError):
+		raise ValueError("TTL must be a whole number of seconds.") from None
+	if not (MIN_CUSTOM_TTL <= ttl <= MAX_CUSTOM_TTL):
+		msg = f"TTL must be between {MIN_CUSTOM_TTL} and {MAX_CUSTOM_TTL} seconds."
+		raise ValueError(msg)
+	return ttl
+
+class UserRecordExplanation(str):
+	# The explanation text of a zone record set by the user. Being a str, it can go anywhere
+	# the explanation goes; it also carries the record's TTL (or None) so that write_nsd_zone
+	# can emit it without widening the records tuples.
+	def __new__(cls, text, ttl=None):
+		obj = super().__new__(cls, text)
+		obj.ttl = ttl
+		return obj
+
+def _get_custom_dns_config_with_ttl(env, only_real_records=False):
+	# Yields (qname, rtype, value, ttl) where ttl is an int or None.
 	try:
 		with open(os.path.join(env['STORAGE_ROOT'], 'dns/custom.yaml'), encoding="utf-8") as f:
 			custom_dns = rtyaml.load(f)
 		if not isinstance(custom_dns, dict): raise ValueError # caught below
 	except:
-		return [ ]
+		return
 
 	for qname, value in custom_dns.items():
 		if qname == "_secondary_nameserver" and only_real_records: continue # skip fake record
@@ -824,14 +857,28 @@ def get_custom_dns_config(env, only_real_records=False):
 			raise ValueError
 
 		for rtype, value2 in values:
-			if isinstance(value2, str):
-				yield (qname, rtype, value2)
-			elif isinstance(value2, list):
-				for value3 in value2:
-					yield (qname, rtype, value3)
+			if isinstance(value2, (str, dict)):
+				value2 = [value2]
 			# No other type of data is allowed.
-			else:
+			elif not isinstance(value2, list):
 				raise ValueError
+
+			for value3 in value2:
+				if isinstance(value3, str):
+					yield (qname, rtype, value3, None)
+				elif isinstance(value3, dict) and isinstance(value3.get("value"), str):
+					yield (qname, rtype, value3["value"], validate_custom_ttl(value3.get("ttl")))
+				else:
+					raise ValueError
+
+def get_custom_dns_config(env, only_real_records=False):
+	# Yields (qname, rtype, value) triples. Use get_custom_dns_ttls for TTLs.
+	for qname, rtype, value, _ttl in _get_custom_dns_config_with_ttl(env, only_real_records):
+		yield (qname, rtype, value)
+
+def get_custom_dns_ttls(env):
+	# Returns a dict mapping (qname, rtype, value) => TTL for records that have a TTL set.
+	return {(q, r, v): ttl for q, r, v, ttl in _get_custom_dns_config_with_ttl(env) if ttl is not None}
 
 def filter_custom_records(domain, custom_dns_iter):
 	for qname, rtype, value in custom_dns_iter:
@@ -852,7 +899,7 @@ def filter_custom_records(domain, custom_dns_iter):
 		yield (qname, rtype, value)
 
 def write_custom_dns_config(config, env):
-	# We get a list of (qname, rtype, value) triples. Convert this into a
+	# We get a list of (qname, rtype, value[, ttl]) tuples. Convert this into a
 	# nice dictionary format for storage on disk.
 	from collections import OrderedDict
 	config = list(config)
@@ -864,8 +911,8 @@ def write_custom_dns_config(config, env):
 		if qname in seen_qnames: continue
 		seen_qnames.add(qname)
 
-		records = [(rec[1], rec[2]) for rec in config if rec[0] == qname]
-		if len(records) == 1 and records[0][0] == "A":
+		records = [(rec[1], rec[2], rec[3] if len(rec) > 3 else None) for rec in config if rec[0] == qname]
+		if len(records) == 1 and records[0][0] == "A" and records[0][2] is None:
 			dns[qname] = records[0][1]
 		else:
 			dns[qname] = OrderedDict()
@@ -876,7 +923,8 @@ def write_custom_dns_config(config, env):
 				if rtype in seen_rtypes: continue
 				seen_rtypes.add(rtype)
 
-				values = [rec[1] for rec in records if rec[0] == rtype]
+				values = [rec[1] if rec[2] is None else OrderedDict([("value", rec[1]), ("ttl", rec[2])])
+					for rec in records if rec[0] == rtype]
 				if len(values) == 1:
 					values = values[0]
 				dns[qname][rtype] = values
@@ -886,7 +934,10 @@ def write_custom_dns_config(config, env):
 	with open(os.path.join(env['STORAGE_ROOT'], 'dns/custom.yaml'), "w", encoding="utf-8") as f:
 		f.write(config_yaml)
 
-def set_custom_dns_record(qname, rtype, value, action, env):
+def set_custom_dns_record(qname, rtype, value, action, env, ttl=None):
+	# ttl is an optional TTL in seconds for the record (None = leave alone / use the default).
+	ttl = validate_custom_ttl(ttl)
+
 	# validate qname
 	for zone, _fn in get_dns_zones(env):
 		# It must match a zone apex or be a subdomain of a zone
@@ -931,17 +982,26 @@ def set_custom_dns_record(qname, rtype, value, action, env):
 			raise ValueError(msg)
 
 	# load existing config
-	config = list(get_custom_dns_config(env))
+	config = list(_get_custom_dns_config_with_ttl(env))
+
+	# All records of an RRset (same name and type) must share one TTL, so a TTL given
+	# here applies to every value of the (qname, rtype) pair, and a new value with no
+	# TTL of its own inherits the TTL of the existing RRset.
+	rrset_ttl = ttl
+	if rrset_ttl is None:
+		rrset_ttl = next((_ttl for _qname, _rtype, _value, _ttl in config
+			if (_qname, _rtype) == (qname, rtype) and _ttl is not None), None)
 
 	# update
 	newconfig = []
 	made_change = False
 	needs_add = True
-	for _qname, _rtype, _value in config:
+	for _qname, _rtype, _value, _ttl in config:
 		if action == "add":
 			if (_qname, _rtype, _value) == (qname, rtype, value):
-				# Record already exists. Bail.
-				return False
+				# Record already exists. Bail, unless only the TTL is changing.
+				if ttl is None or ttl == _ttl:
+					return False
 		elif action == "set":
 			if (_qname, _rtype) == (qname, rtype):
 				if _value == value:
@@ -964,11 +1024,17 @@ def set_custom_dns_record(qname, rtype, value, action, env):
 		else:
 			raise ValueError("Invalid action: " + action)
 
-		# Preserve this record.
-		newconfig.append((_qname, _rtype, _value))
+		# Preserve this record, applying a new RRset TTL if one was given.
+		if action in {"add", "set"} and ttl is not None and (_qname, _rtype) == (qname, rtype) and _ttl != ttl:
+			_ttl = ttl
+			made_change = True
+		# An existing identical value being re-added with a new TTL is just the TTL change above.
+		if action == "add" and (_qname, _rtype, _value) == (qname, rtype, value):
+			needs_add = False
+		newconfig.append((_qname, _rtype, _value, _ttl))
 
 	if action in {"add", "set"} and needs_add and value is not None:
-		newconfig.append((qname, rtype, value))
+		newconfig.append((qname, rtype, value, rrset_ttl))
 		made_change = True
 
 	if made_change:
@@ -1097,7 +1163,7 @@ if __name__ == "__main__":
 	from utils import load_environment
 	env = load_environment()
 	if sys.argv[-1] == "--lint":
-		write_custom_dns_config(get_custom_dns_config(env), env)
+		write_custom_dns_config(_get_custom_dns_config_with_ttl(env), env)
 	elif sys.argv[-1] == "--update":
 		do_dns_update(env, force=True)
 	else:

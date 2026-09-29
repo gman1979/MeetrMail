@@ -15,7 +15,7 @@ info:
   license:
     name: CC0 1.0 Universal
     url: https://creativecommons.org/publicdomain/zero/1.0/legalcode
-  version: 1.0.0
+  version: 1.0.1
 externalDocs:
   description: Find out more about MeetrMail.
   url: https://meetrmail.net/
@@ -1809,6 +1809,513 @@ paths:
             text/html:
               schema:
                 type: string
+  /mail/quotas:
+    get:
+      tags:
+        - Mail
+      summary: Get mailbox usage by domain
+      description: |
+        Returns, for each domain, the storage used and allocated and a list of its mailboxes with `quota_bytes` (0 is unlimited), `used_bytes` and `percent`.
+      operationId: getMailQuotas
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/mail/quotas" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /system/default-quota:
+    get:
+      tags:
+        - System
+      summary: Get the default mailbox quota
+      description: |
+        Returns the quota given to new mailboxes when none is specified. `0` is unlimited.
+      operationId: getDefaultQuota
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/system/default-quota" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+    post:
+      tags:
+        - System
+      summary: Set the default mailbox quota
+      description: |
+        Sets the quota for new mailboxes. Suffixes G and M are allowed; `0` is unlimited.
+      operationId: setDefaultQuota
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                default_quota:
+                  type: string
+                  description: The quota, for example 500M or 2G.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/system/default-quota" \
+              -d "default_quota=2G" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /system/fail2ban:
+    get:
+      tags:
+        - System
+      summary: Get fail2ban jails and banned addresses
+      description: |
+        Returns every jail with its failure and ban counters and the addresses currently banned.
+      operationId: getFail2banStatus
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/system/fail2ban" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /system/fail2ban/unban:
+    post:
+      tags:
+        - System
+      summary: Unban an address
+      description: |
+        Removes an address from a jail's ban list.
+      operationId: fail2banUnban
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                jail:
+                  type: string
+                  description: The jail name.
+                ip:
+                  type: string
+                  description: The IPv4 or IPv6 address.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/system/fail2ban/unban" \
+              -d "jail=sshd" -d "ip=203.0.113.7" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /system/fail2ban/ban:
+    post:
+      tags:
+        - System
+      summary: Ban an address
+      description: |
+        Bans an address in a jail.
+      operationId: fail2banBan
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                jail:
+                  type: string
+                  description: The jail name.
+                ip:
+                  type: string
+                  description: The IPv4 or IPv6 address.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/system/fail2ban/ban" \
+              -d "jail=sshd" -d "ip=203.0.113.7" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/overview:
+    get:
+      tags:
+        - Mail
+      summary: Get spam filtering settings and statistics
+      description: |
+        Returns Rspamd statistics, the global thresholds, the allow/block lists and any per-mailbox thresholds.
+      operationId: getSpamOverview
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/spam/overview" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/thresholds:
+    post:
+      tags:
+        - Mail
+      summary: Set the global spam thresholds
+      description: |
+        Sets the greylist, add header and reject scores. They must satisfy greylist <= add_header <= reject.
+      operationId: setSpamThresholds
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                greylist:
+                  type: string
+                  description: Score above which first-time senders are greylisted.
+                add_header:
+                  type: string
+                  description: Score above which mail is marked as spam.
+                reject:
+                  type: string
+                  description: Score above which mail is refused.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/spam/thresholds" \
+              -d "greylist=4" -d "add_header=6" -d "reject=15" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/user-thresholds:
+    post:
+      tags:
+        - Mail
+      summary: Set or remove thresholds for one mailbox
+      description: |
+        Gives a mailbox its own thresholds (same fields as `/spam/thresholds`), or with `remove=1` removes them.
+      operationId: setSpamUserThresholds
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: The mailbox.
+                greylist:
+                  type: string
+                  description: Greylist score.
+                add_header:
+                  type: string
+                  description: Add header score.
+                reject:
+                  type: string
+                  description: Reject score.
+                remove:
+                  type: string
+                  description: Pass 1 to remove the mailbox's thresholds.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/spam/user-thresholds" \
+              -d "email=me@example.com" -d "greylist=3" -d "add_header=5" -d "reject=10" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/lists:
+    post:
+      tags:
+        - Mail
+      summary: Change an allow or block list
+      description: |
+        Adds or removes an entry. `list` is one of `allow_senders`, `block_senders`, `allow_ips`, `block_ips`.
+      operationId: changeSpamList
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                list:
+                  type: string
+                  description: Which list.
+                action:
+                  type: string
+                  description: add or remove.
+                value:
+                  type: string
+                  description: An address, domain, IP address or CIDR network.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/spam/lists" \
+              -d "list=block_senders" -d "action=add" -d "value=spam.example.net" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/folder:
+    get:
+      tags:
+        - Mail
+      summary: List a mailbox's Spam folder
+      description: |
+        Returns the newest messages in the Spam folder of the mailbox given in the `email` query parameter.
+      operationId: getSpamFolder
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/spam/folder?email=me@example.com" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/folder/release:
+    post:
+      tags:
+        - Mail
+      summary: Move a message from Spam to the Inbox
+      description: |
+
+      operationId: releaseSpamMessage
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: The mailbox.
+                uid:
+                  type: string
+                  description: The message UID from the listing.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/spam/folder/release" \
+              -d "email=me@example.com" -d "uid=42" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /spam/folder/delete:
+    post:
+      tags:
+        - Mail
+      summary: Delete a message from the Spam folder
+      description: |
+        Permanently deletes the message.
+      operationId: deleteSpamMessage
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: The mailbox.
+                uid:
+                  type: string
+                  description: The message UID from the listing.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/spam/folder/delete" \
+              -d "email=me@example.com" -d "uid=42" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /mail/import:
+    get:
+      tags:
+        - Mail
+      summary: List mail imports
+      description: |
+        Returns recent imports from other IMAP servers with their state and a tail of their output.
+      operationId: listMailImports
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/mail/import" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /mail/import/start:
+    post:
+      tags:
+        - Mail
+      summary: Start importing mail from another IMAP server
+      description: |
+        Copies all mail one-way from a remote IMAP account into a local mailbox. Returns the job `id`.
+      operationId: startMailImport
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: The destination mailbox on this box.
+                host:
+                  type: string
+                  description: Source IMAP server.
+                port:
+                  type: string
+                  description: Source port.
+                security:
+                  type: string
+                  description: imaps, starttls or none.
+                username:
+                  type: string
+                  description: Source account username.
+                password:
+                  type: string
+                  description: Source account password; not stored.
+                verify_cert:
+                  type: string
+                  description: 1 (default) or 0.
+                skip_spam:
+                  type: string
+                  description: 1 (default) to skip the Spam/Junk folder, or 0.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/mail/import/start" \
+              -d "email=me@example.com" -d "host=imap.old.example" -d "port=993" -d "security=imaps" \
+              -d "username=me" -d "password=secret" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /mail/import/status:
+    get:
+      tags:
+        - Mail
+      summary: Get one mail import
+      description: |
+        Returns the import identified by the `id` query parameter, including its output.
+      operationId: getMailImport
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X GET "https://{host}/admin/mail/import/status?id=<id>" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
+  /mail/import/cancel:
+    post:
+      tags:
+        - Mail
+      summary: Cancel a running mail import
+      description: |
+
+      operationId: cancelMailImport
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: The import id.
+      x-codeSamples:
+        - lang: curl
+          source: |
+            curl -X POST "https://{host}/admin/mail/import/cancel" \
+              -d "id=<id>" \
+              -u "<email>:<password>"
+      responses:
+        200:
+          description: Successful operation
+        400:
+          description: Invalid request; the body explains why
+        403:
+          description: Forbidden
 components:
   securitySchemes:
     basicAuth:
@@ -2088,6 +2595,13 @@ components:
         value:
           type: string
           example: 10 example.com.
+        ttl:
+          type: integer
+          nullable: true
+          minimum: 30
+          maximum: 2592000
+          example: 300
+          description: The record's TTL in seconds, or null for the default (one day). Set it with the `ttl` query parameter on POST and PUT.
       description: Custom DNS record detail detail.
     DNSCustomRecordsResponse:
       type: array

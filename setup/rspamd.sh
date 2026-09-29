@@ -297,6 +297,85 @@ add_header = 6;
 reject = 15;
 EOF
 
+# Thresholds changed on the Spam page of the control panel are kept under
+# $STORAGE_ROOT so that re-running setup does not put the defaults back.
+if [ -s "$STORAGE_ROOT/mail/rspamd/actions.conf" ]; then
+	cp "$STORAGE_ROOT/mail/rspamd/actions.conf" /etc/rspamd/local.d/actions.conf
+fi
+
+# #### Per-recipient thresholds
+#
+# The control panel can give one mailbox its own thresholds. It writes the
+# settings{} blocks to $STORAGE_ROOT/mail/rspamd/settings.conf; put them back.
+if [ -s "$STORAGE_ROOT/mail/rspamd/settings.conf" ]; then
+	cp "$STORAGE_ROOT/mail/rspamd/settings.conf" /etc/rspamd/local.d/settings.conf
+fi
+
+# #### Allow and block lists
+#
+# Edited on the Spam page of the control panel, which writes the map files.
+# Rspamd re-reads a map file when it changes, so no reload is needed after an
+# edit. The files must exist (empty is fine) or the multimap module logs errors.
+#
+#  - Allowed senders only count when the message also passes SPF or DKIM, so
+#    that somebody forging an allowed address does not get a free pass.
+#  - Blocked senders and blocked IPs are rejected outright.
+#  - Allowed IPs get a large negative score, so they are still scanned and
+#    tagged, but a spam verdict is very unlikely.
+for f in allow_sender_addr allow_sender_domain allow_ip block_sender_addr block_sender_domain block_ip; do
+	if [ ! -e "$STORAGE_ROOT/mail/rspamd/$f.map" ]; then
+		touch "$STORAGE_ROOT/mail/rspamd/$f.map"
+	fi
+	chmod 644 "$STORAGE_ROOT/mail/rspamd/$f.map"
+done
+
+cat > /etc/rspamd/local.d/multimap.conf <<EOF;
+# MeetrMail --- Do not edit / will be overwritten on update.
+MEETRMAIL_ALLOW_SENDER {
+  type = "from";
+  map = "$STORAGE_ROOT/mail/rspamd/allow_sender_addr.map";
+  require_symbols = "(R_SPF_ALLOW | R_DKIM_ALLOW)";
+  score = -15.0;
+  description = "Sender address is on the MeetrMail allow list";
+}
+MEETRMAIL_ALLOW_SENDER_DOMAIN {
+  type = "from";
+  filter = "email:domain";
+  map = "$STORAGE_ROOT/mail/rspamd/allow_sender_domain.map";
+  require_symbols = "(R_SPF_ALLOW | R_DKIM_ALLOW)";
+  score = -15.0;
+  description = "Sender domain is on the MeetrMail allow list";
+}
+MEETRMAIL_ALLOW_IP {
+  type = "ip";
+  map = "$STORAGE_ROOT/mail/rspamd/allow_ip.map";
+  score = -15.0;
+  description = "Client IP is on the MeetrMail allow list";
+}
+MEETRMAIL_BLOCK_SENDER {
+  type = "from";
+  map = "$STORAGE_ROOT/mail/rspamd/block_sender_addr.map";
+  prefilter = true;
+  action = "reject";
+  message = "Sender is blocked";
+}
+MEETRMAIL_BLOCK_SENDER_DOMAIN {
+  type = "from";
+  filter = "email:domain";
+  map = "$STORAGE_ROOT/mail/rspamd/block_sender_domain.map";
+  prefilter = true;
+  action = "reject";
+  message = "Sender is blocked";
+}
+MEETRMAIL_BLOCK_IP {
+  type = "ip";
+  map = "$STORAGE_ROOT/mail/rspamd/block_ip.map";
+  prefilter = true;
+  action = "reject";
+  message = "Client is blocked";
+}
+EOF
+
 # #### Headers
 #
 # Add the headers the delivery-time sieve rule and mail clients look for.
